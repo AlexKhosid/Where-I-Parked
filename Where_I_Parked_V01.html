@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>איפה חניתי</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.css" />
+    <style>
+        body, html {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        header {
+            background-color: #4CAF50;
+            color: white;
+            text-align: center;
+            padding: 10px;
+            font-size: 1.2rem;
+        }
+        #map {
+            flex-grow: 1;
+            width: 100%;
+        }
+        .button-container {
+            position: fixed;
+            bottom: 20px;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .app-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 14px;
+            margin: 4px;
+            cursor: pointer;
+            border-radius: 25px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: 0.3s;
+        }
+        .app-button:hover {
+            background-color: #45a049;
+            box-shadow: 0 8px 16px rgba(0,0,0,0.3);
+        }
+        @keyframes pulse {
+            0% { r: 8; opacity: 1; }
+            50% { r: 12; opacity: 0.5; }
+            100% { r: 8; opacity: 1; }
+        }
+        .user-location-marker circle {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>איפה חניתי</header>
+        <div id="map"></div>
+        <div class="button-container">
+            <button id="parkButton" class="app-button">חניתי כאן</button>
+            <button id="manualButton" class="app-button">סמן ידנית</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/leaflet.js"></script>
+    <script>
+        let map, marker, userLocationMarker, watchId;
+        const storageKey = 'parkedLocation';
+
+        function initMap() {
+            map = L.map('map').setView([31.7683, 35.2137], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+            const storedLocation = localStorage.getItem(storageKey);
+            if (storedLocation) {
+                try {
+                    const [lat, lng] = JSON.parse(storedLocation);
+                    setMarker(lat, lng);
+                    map.setView([lat, lng], 16);
+                } catch (error) {
+                    console.error('Failed to parse stored location:', error);
+                }
+            }
+
+            startLocationTracking();
+        }
+
+        function setMarker(lat, lng) {
+            if (marker) {
+                map.removeLayer(marker);
+            }
+            marker = L.marker([lat, lng]).addTo(map);
+        }
+
+        function startLocationTracking() {
+            if ("geolocation" in navigator) {
+                watchId = navigator.geolocation.watchPosition(updateLocation, handleLocationError, {
+                    enableHighAccuracy: true,
+                    maximumAge: 30000,
+                    timeout: 27000
+                });
+            } else {
+                alert('הדפדפן שלך לא תומך באיתור מיקום.');
+            }
+        }
+
+        function updateLocation(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            const heading = position.coords.heading;
+
+            if (userLocationMarker) {
+                map.removeLayer(userLocationMarker);
+            }
+
+            userLocationMarker = L.featureGroup().addTo(map);
+
+            // Blue pulsing circle
+            L.circle([lat, lng], {
+                color: 'blue',
+                fillColor: '#3388ff',
+                fillOpacity: 0.5,
+                radius: accuracy
+            }).addTo(userLocationMarker);
+
+            // Centered dot
+            L.circleMarker([lat, lng], {
+                color: 'white',
+                fillColor: 'blue',
+                fillOpacity: 1,
+                radius: 3,
+                weight: 2
+            }).addTo(userLocationMarker);
+
+            // Direction arrow
+            if (heading !== null && !isNaN(heading)) {
+                const arrowIcon = L.divIcon({
+                    html: '➤',
+                    className: 'arrow-icon',
+                    iconSize: [20, 20],
+                    iconAnchor: [10, 10]
+                });
+                L.marker([lat, lng], {
+                    icon: arrowIcon,
+                    rotationAngle: heading
+                }).addTo(userLocationMarker);
+            }
+
+            map.setView([lat, lng], map.getZoom());
+        }
+
+        function handleLocationError(error) {
+            console.error('Error getting location:', error);
+            alert('לא הצלחנו לאתר את המיקום שלך. אנא אפשר גישה למיקום או נסה שוב.');
+        }
+
+        function parkHere() {
+            if (userLocationMarker) {
+                const latlng = userLocationMarker.getBounds().getCenter();
+                setMarker(latlng.lat, latlng.lng);
+                localStorage.setItem(storageKey, JSON.stringify([latlng.lat, latlng.lng]));
+                alert('מיקום החנייה נשמר!');
+            } else {
+                alert('לא נמצא מיקום נוכחי. אנא המתן לאיתור המיקום או השתמש בסימון ידני.');
+            }
+        }
+
+        function enableManualMarking() {
+            alert('לחץ על המפה כדי לסמן את מיקום החנייה שלך');
+            map.once('click', function(e) {
+                setMarker(e.latlng.lat, e.latlng.lng);
+                localStorage.setItem(storageKey, JSON.stringify([e.latlng.lat, e.latlng.lng]));
+                alert('מיקום החנייה נשמר!');
+            });
+        }
+
+        document.getElementById('parkButton').addEventListener('click', parkHere);
+        document.getElementById('manualButton').addEventListener('click', enableManualMarking);
+
+        window.onload = initMap;
+
+        // Clean up when the page is closed or refreshed
+        window.onbeforeunload = function() {
+            if (watchId !== undefined) {
+                navigator.geolocation.clearWatch(watchId);
+            }
+        };
+    </script>
+</body>
+</html>
